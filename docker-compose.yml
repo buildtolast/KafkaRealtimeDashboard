@@ -1,0 +1,60 @@
+services:
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka-dashboard-broker
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - kafka-net
+
+  dashboard:
+    build: .
+    container_name: kafka-dashboard-app
+    ports:
+      - "3001:3001"
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "3001"
+      STATIC_DIR: ./static
+      RUST_LOG: info
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - kafka-net
+
+  seed:
+    image: apache/kafka:3.7.0
+    container_name: kafka-dashboard-seed
+    volumes:
+      - ./scripts/seed-topics.sh:/seed-topics.sh
+    entrypoint: ["/bin/bash", "/seed-topics.sh"]
+    environment:
+      KAFKA_BROKER: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - kafka-net
+
+networks:
+  kafka-net:
+    driver: bridge

@@ -1,0 +1,25 @@
+[package]
+name = "kafka-dashboard"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["static-kafka"]
+static-kafka = ["rdkafka/cmake-build"]
+dynamic-kafka = ["rdkafka/dynamic-linking"]
+
+[dependencies]
+actix-web = "4"
+actix-ws = "0.3"
+actix-files = "0.6"
+actix-cors = "0.7"
+actix-rt = "2"
+rdkafka = "0.37"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+env_logger = "0.11"
+log = "0.4"
+chrono = { version = "0.4", features = ["serde"] }

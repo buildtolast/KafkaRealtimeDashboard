@@ -329,7 +329,7 @@ Pause is implemented purely on the client side. The WebSocket stays connected (t
 | Message list | react-virtuoso | Virtualized rendering for large lists |
 | Charts | recharts | Composable SVG line charts for message rate timeseries |
 | Theme | Blueprint.js (dark) | Consistent dark UI components |
-| Containerization | Docker multi-stage, Compose | Single command deployment |
+| Containerization | Docker multi-stage, Compose, Kubernetes | Single command deployment (Docker or Minikube) |
 
 ---
 
@@ -356,6 +356,95 @@ docker compose logs -f dashboard
 # Stop everything
 docker compose down
 ```
+
+---
+
+## Kubernetes (Minikube)
+
+The project includes full Kubernetes manifests for deploying on Minikube. The setup mirrors Docker Compose with three components: Kafka StatefulSet (5Gi persistent storage), Dashboard Deployment, and Seed Producer Deployment.
+
+### Prerequisites
+
+- Minikube installed
+- kubectl configured
+- Minimum: 4 CPUs, 4GB RAM, 20GB disk
+
+### Deploy
+
+```bash
+# Start Minikube
+minikube start --cpus=4 --memory=4096 --disk-size=20g
+
+# Run the automated deployment script
+./k8s/deploy.sh
+```
+
+The script builds the dashboard image using Minikube's Docker daemon, deploys all manifests in order, waits for readiness, and displays the dashboard URL.
+
+### Access the Dashboard
+
+```bash
+# Direct access via NodePort
+http://$(minikube ip):30001
+
+# Or auto-open in browser
+minikube service dashboard -n kafka-dashboard
+
+# Or port-forward to localhost
+kubectl port-forward -n kafka-dashboard service/dashboard 3001:3001
+```
+
+### Verify
+
+```bash
+# Check pods
+kubectl get pods -n kafka-dashboard
+
+# List Kafka topics
+kubectl exec -it kafka-0 -n kafka-dashboard -- \
+  /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+```
+
+### Cleanup
+
+```bash
+./k8s/cleanup.sh
+```
+
+### Architecture
+
+```
+Minikube Cluster (namespace: kafka-dashboard)
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  ┌────────────────────┐  ┌──────────────────┐  ┌─────────────┐ │
+│  │ StatefulSet: kafka │  │ Deploy: dashboard │  │ Deploy: seed│ │
+│  │                    │  │                   │  │             │ │
+│  │ apache/kafka:3.7.0 │  │ kafka-dashboard   │  │ kafka:3.7.0 │ │
+│  │ KRaft mode         │◄─┤ :latest           │  │             │ │
+│  │                    │  │                   │  │ Produces    │ │
+│  │ PVC: 5Gi           │  │ Init: wait-kafka  │  │ JSON/2s    │ │
+│  │                    │◄─┤                   │  │             │ │
+│  │ Ports:             │  │ Port: 3001        │  └──────┬──────┘ │
+│  │  9092 (internal)   │  └────────┬──────────┘         │        │
+│  │  9094 (external)   │◄───────────────────────────────┘        │
+│  └────────────────────┘           │                             │
+│                                   │                             │
+│  Services:                        │                             │
+│  ├─ kafka (ClusterIP:9092)       │                             │
+│  ├─ kafka-external (NodePort:30094)                            │
+│  └─ dashboard (NodePort:30001) ◄──┘                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         │ http://$(minikube ip):30001
+         ▼
+    ┌──────────┐
+    │ Browser  │
+    └──────────┘
+```
+
+For full details including troubleshooting, scaling, and alternative configurations, see [k8s/README.md](k8s/README.md).
 
 ---
 
@@ -413,6 +502,13 @@ KafkaDashboard/
 ├── .dockerignore
 ├── scripts/
 │   └── seed-topics.sh            # Creates 4 topics, produces JSON messages every 2s
+├── k8s/                          # ── Kubernetes / Minikube Deployment ──
+│   ├── deploy.sh                 # Automated build + deploy script
+│   ├── cleanup.sh                # Namespace teardown script
+│   ├── namespace.yaml            # kafka-dashboard namespace
+│   ├── kafka/                    # Kafka StatefulSet, headless + ClusterIP + NodePort services
+│   ├── dashboard/                # Dashboard Deployment + NodePort service + ConfigMap
+│   └── seed/                     # Seed producer Deployment + ConfigMap (seed-topics.sh)
 │
 ├── src/                          # ── Rust Backend ──
 │   ├── main.rs                   # TopicManager struct, Actix server, route wiring

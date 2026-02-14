@@ -2,19 +2,27 @@
 
 Real-time Kafka topic monitoring dashboard with a Rust backend and React frontend. Each topic gets its own draggable, resizable window panel showing live-streamed messages as they arrive.
 
+## Demo
+
+![Kafka Dashboard Demo](demo.gif)
+
 ## Features
 
 - **Topic selector** — choose which topics to monitor before opening panels
-- **Tiling window layout** — drag, resize, and rearrange topic panels freely
+- **3 layout modes** — **Mosaic** (tiling drag & resize), **Tabs** (single-topic focus with scrollable tab bar), **Grid** (auto-fill responsive grid). Auto-selects Tabs when > 6 topics
+- **Timeseries chart** — Monitor/Chart toggle shows a live line chart of message rate per topic (5-second buckets, 5-minute rolling window via recharts)
 - **Live message streaming** — WebSocket per topic with automatic reconnect
 - **Pause / Play** — freeze live message ingestion per topic, resume anytime
 - **Seek by timestamp** — jump to historical messages from any date/time
+- **Message truncation** — messages longer than 200 characters are truncated with `...`; click Expand/Collapse to toggle full view
 - **Key + Value display** — each message shows both key and value as labeled rows
 - **Color-coded messages** — 20-color rotating palette on black background for readability
 - **Export to CSV** — download visible messages per topic as a CSV file
-- **Global search** — filter messages across all topic windows by key or payload, with highlighted matches
+- **Global search + results panel** — type a query and press Enter to open a dedicated search results panel that collates matches from all selected topics with highlighted results grouped by topic
+- **Date filtering** — global date filter in the header applies to all topics; each window has a local date filter that overrides the global one. Both have × clear buttons
 - **Runtime broker config** — switch Kafka broker address from the header bar without restarting
 - **Virtualized scrolling** — smooth performance with thousands of messages via react-virtuoso
+- **Prominent topic labels** — blue-accented title bars with clear topic names and blue pill message count badges
 
 ---
 
@@ -245,32 +253,38 @@ Pause is implemented purely on the client side. The WebSocket stays connected (t
 │     │  [ Open 3 Topics ]              │                             │
 │     └──────────────────────────────────┘                             │
 │                                                                      │
-│  4. LIVE MONITORING                                                  │
+│  4. LAYOUT & MONITORING                                              │
+│     Header: [Search...] [From: datetime] [Change Topics]             │
+│                                                                      │
+│     View toggle:  [Monitor] [Chart]                                  │
+│     Layout mode:  [Mosaic] [Tabs] [Grid]                             │
+│                                                                      │
+│     Mosaic (default for ≤6 topics):                                  │
 │     ┌─────────────────────┬─────────────────────┐                    │
-│     │ orders              │ users               │                    │
+│     │ orders         42 ● │ users          18 ● │                    │
 │     │ ● Live  [Pause]     │ ● Live  [Pause]     │                    │
-│     │ [seek: ___] [Seek]  │ [seek: ___] [Seek]  │                    │
+│     │ [seek] [Filter from]│ [seek] [Filter from]│                    │
 │     │                     │                     │                    │
 │     │ Key: order-42       │ Key: user-7         │                    │
 │     │ Val: {"id":42,...}  │ Val: {"action":...} │                    │
-│     │                     │                     │                    │
-│     │ Key: order-43       │ Key: user-12        │                    │
-│     │ Val: {"id":43,...}  │ Val: {"action":...} │                    │
 │     ├─────────────────────┴─────────────────────┤                    │
-│     │ logs                                      │                    │
-│     │ ● Live  [Pause]  42 messages  [Clear] [CSV]│                   │
-│     │ [seek: 2026-02-13T10:00] [Seek]           │                    │
-│     │                                           │                    │
-│     │ #1201 P0  10:42:01                        │                    │
-│     │ Key: (null)                               │                    │
-│     │ Val: {"level":"info","msg":"Request..."}  │                    │
+│     │ logs                              201 ●   │                    │
+│     │ Val: {"level":"info","msg":"Requ...  [+]  │                    │
 │     └───────────────────────────────────────────┘                    │
 │                                                                      │
-│  5. SEARCH (header bar)                                              │
-│     [Search all topics... error ]  → highlights "error" in yellow    │
-│     across all open topic windows simultaneously                     │
+│  5. CHART VIEW                                                       │
+│     Toggle to [Chart] → live line chart of msg/5s per topic          │
+│     Updates every 2 seconds, rolling 5-minute window                 │
 │                                                                      │
-│  6. EXPORT                                                           │
+│  6. SEARCH (Enter → results panel)                                   │
+│     Type query → Enter → modal with results grouped by topic         │
+│     Each match shows partition, offset, timestamp + highlight        │
+│                                                                      │
+│  7. DATE FILTERING                                                   │
+│     Global: header [From: ___] applies to all windows                │
+│     Local:  per-window [Filter from: ___] overrides global           │
+│                                                                      │
+│  8. EXPORT                                                           │
 │     Click [Export CSV] on any topic → downloads .csv with:           │
 │     topic, partition, offset, key, value, timestamp                  │
 └──────────────────────────────────────────────────────────────────────┘
@@ -313,6 +327,7 @@ Pause is implemented purely on the client side. The WebSocket stays connected (t
 | Frontend | React 18, TypeScript, Vite | Fast dev experience, type safety |
 | Window layout | react-mosaic-component | Tiling WM for the browser (used by Palantir) |
 | Message list | react-virtuoso | Virtualized rendering for large lists |
+| Charts | recharts | Composable SVG line charts for message rate timeseries |
 | Theme | Blueprint.js (dark) | Consistent dark UI components |
 | Containerization | Docker multi-stage, Compose | Single command deployment |
 
@@ -420,19 +435,27 @@ KafkaDashboard/
     ├── vite.config.ts             # Dev proxy to :3001
     ├── index.html
     └── src/
-        ├── App.tsx                # Top-level: broker config, search bar, topic selection flow
+        ├── main.tsx               # Entry point, wraps App in MessageTrackingProvider
+        ├── App.tsx                # Top-level: broker config, search, date filter, layout manager
         ├── types.ts               # KafkaMessage, TopicsResponse, BrokerResponse interfaces
         ├── styles/
-        │   └── index.css          # Full dark theme, mosaic overrides, message colors
+        │   └── index.css          # Full dark theme, mosaic overrides, message colors, layout modes
+        ├── contexts/
+        │   └── MessageTrackingContext.tsx  # Shared message rate tracking + buffer for chart & search
         ├── hooks/
         │   ├── useTopics.ts       # GET /api/topics with loading/error/refetch
-        │   └── useKafkaStream.ts  # WS per topic: auto-reconnect, pause/play, seek, 500-msg cap
+        │   └── useKafkaStream.ts  # WS per topic: auto-reconnect, pause/play, seek, message tracking
         └── components/
             ├── BrokerConfig.tsx    # Inline broker input + connect button in header
             ├── TopicSelector.tsx   # Checkbox grid with select all / clear / confirm
+            ├── LayoutManager.tsx   # Monitor/Chart toggle + Mosaic/Tabs/Grid layout selector
             ├── MosaicLayout.tsx    # react-mosaic tiling layout from topic list
-            ├── TopicWindow.tsx     # Per-topic: toolbar, seek bar, pause, clear, CSV export
-            ├── MessageList.tsx     # Virtuoso list, 20-color palette, key/value rows, search highlight
+            ├── TabsLayout.tsx      # Single-topic tab view with horizontal scrollable tab bar
+            ├── GridLayout.tsx      # CSS Grid auto-fill layout (minmax 480px)
+            ├── ChartView.tsx       # Recharts line chart — message rate per topic over time
+            ├── TopicWindow.tsx     # Per-topic: toolbar, seek, date filter, pause, clear, CSV
+            ├── MessageList.tsx     # Virtuoso list, 20-color palette, truncation, search highlight
+            ├── SearchResultsPanel.tsx # Modal overlay with collated search results from all topics
             └── ConnectionStatus.tsx # Green/red dot with Live/Reconnecting label
 ```
 
@@ -464,3 +487,7 @@ cargo run --no-default-features --features dynamic-kafka
 | Seek max messages | 200 (configurable) | Caps historical fetch size |
 | Seek deadline | 5 seconds | Prevents blocking the thread pool |
 | Seed interval | 2 seconds | One JSON message per topic per cycle |
+| Message truncation | 200 characters | Long payloads collapsed with expand toggle |
+| Chart rate buckets | 5 seconds × 60 | 5-minute rolling window for message rate |
+| Search buffer | 500 per topic | Shared buffer used by search results panel |
+| Auto-tabs threshold | > 6 topics | Switches default layout from Mosaic to Tabs |

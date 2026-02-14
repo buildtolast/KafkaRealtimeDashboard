@@ -1,30 +1,15 @@
-import { useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { KafkaMessage } from '../types';
 
-// Bright, high-contrast colors readable on black background
 const MESSAGE_COLORS = [
-  '#00ff87', // green
-  '#ff6b6b', // coral red
-  '#69dbff', // sky blue
-  '#ffd93d', // yellow
-  '#c084fc', // purple
-  '#ff9f43', // orange
-  '#0abde3', // cyan
-  '#ff6b9d', // pink
-  '#a3e635', // lime
-  '#38bdf8', // light blue
-  '#fb923c', // amber
-  '#f472b6', // hot pink
-  '#34d399', // emerald
-  '#e879f9', // fuchsia
-  '#facc15', // gold
-  '#22d3ee', // teal
-  '#f87171', // red
-  '#a78bfa', // violet
-  '#4ade80', // bright green
-  '#fbbf24', // warm yellow
+  '#00ff87', '#ff6b6b', '#69dbff', '#ffd93d', '#c084fc',
+  '#ff9f43', '#0abde3', '#ff6b9d', '#a3e635', '#38bdf8',
+  '#fb923c', '#f472b6', '#34d399', '#e879f9', '#facc15',
+  '#22d3ee', '#f87171', '#a78bfa', '#4ade80', '#fbbf24',
 ];
+
+const MAX_DISPLAY_LENGTH = 200;
 
 function getColor(offset: number): string {
   return MESSAGE_COLORS[Math.abs(offset) % MESSAGE_COLORS.length];
@@ -49,6 +34,17 @@ interface MessageListProps {
 }
 
 export function MessageList({ messages, searchQuery }: MessageListProps) {
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
+
+  const toggleExpand = useCallback((msgId: string) => {
+    setExpandedMessages((prev) => {
+      const next = new Set(prev);
+      if (next.has(msgId)) next.delete(msgId);
+      else next.add(msgId);
+      return next;
+    });
+  }, []);
+
   if (messages.length === 0) {
     return <div className="empty-messages">Waiting for messages...</div>;
   }
@@ -58,15 +54,35 @@ export function MessageList({ messages, searchQuery }: MessageListProps) {
       data={messages}
       className="message-list"
       followOutput="smooth"
-      itemContent={(_index, msg) => (
-        <MessageRow msg={msg} searchQuery={searchQuery} />
-      )}
+      itemContent={(_index, msg) => {
+        const msgId = `${msg.topic}-${msg.partition}-${msg.offset}`;
+        return (
+          <MessageRow
+            msg={msg}
+            searchQuery={searchQuery}
+            expanded={expandedMessages.has(msgId)}
+            onToggle={() => toggleExpand(msgId)}
+          />
+        );
+      }}
     />
   );
 }
 
-function MessageRow({ msg, searchQuery }: { msg: KafkaMessage; searchQuery?: string }) {
+interface MessageRowProps {
+  msg: KafkaMessage;
+  searchQuery?: string;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function MessageRow({ msg, searchQuery, expanded, onToggle }: MessageRowProps) {
   const color = useMemo(() => getColor(msg.offset), [msg.offset]);
+  const payloadText = msg.payload ?? '(empty)';
+  const isTruncatable = payloadText.length > MAX_DISPLAY_LENGTH;
+  const displayText = !expanded && isTruncatable
+    ? payloadText.slice(0, MAX_DISPLAY_LENGTH)
+    : payloadText;
 
   return (
     <div className="message-row" style={{ borderLeftColor: color }}>
@@ -87,9 +103,17 @@ function MessageRow({ msg, searchQuery }: { msg: KafkaMessage; searchQuery?: str
       </div>
       <div className="msg-kv">
         <span className="msg-kv-label">Value:</span>
-        <pre className="msg-payload" style={{ color }}>
-          {highlightText(msg.payload ?? '(empty)', searchQuery)}
-        </pre>
+        <div className="msg-payload-container">
+          <pre className="msg-payload" style={{ color }}>
+            {highlightText(displayText, searchQuery)}
+            {!expanded && isTruncatable && <span className="msg-truncation-ellipsis">...</span>}
+          </pre>
+          {isTruncatable && (
+            <button className="msg-expand-toggle" onClick={onToggle}>
+              {expanded ? 'Collapse' : 'Expand'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useKafkaStream } from '../hooks/useKafkaStream';
 import { MessageList } from './MessageList';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -7,6 +7,7 @@ import { KafkaMessage } from '../types';
 interface TopicWindowProps {
   topic: string;
   searchQuery?: string;
+  globalDateFilterMs?: number;
 }
 
 function exportToCsv(messages: KafkaMessage[], topic: string) {
@@ -26,9 +27,10 @@ function exportToCsv(messages: KafkaMessage[], topic: string) {
   URL.revokeObjectURL(url);
 }
 
-export function TopicWindow({ topic, searchQuery }: TopicWindowProps) {
+export function TopicWindow({ topic, searchQuery, globalDateFilterMs }: TopicWindowProps) {
   const { messages, connected, paused, clear, togglePause, seekToTimestamp } = useKafkaStream(topic);
   const [seekInput, setSeekInput] = useState('');
+  const [localDateFilter, setLocalDateFilter] = useState('');
 
   function handleSeek() {
     if (!seekInput.trim()) return;
@@ -41,13 +43,35 @@ export function TopicWindow({ topic, searchQuery }: TopicWindowProps) {
     if (e.key === 'Enter') handleSeek();
   }
 
-  const filteredMessages = searchQuery
-    ? messages.filter(
+  // Compute effective date filter: local overrides global
+  const effectiveDateFilterMs = useMemo(() => {
+    if (localDateFilter) {
+      const d = new Date(localDateFilter);
+      return isNaN(d.getTime()) ? undefined : d.getTime();
+    }
+    return globalDateFilterMs;
+  }, [localDateFilter, globalDateFilterMs]);
+
+  const filteredMessages = useMemo(() => {
+    let result = messages;
+
+    // Apply date filter
+    if (effectiveDateFilterMs) {
+      result = result.filter((m) => m.timestamp && m.timestamp >= effectiveDateFilterMs);
+    }
+
+    // Apply search filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
         (m) =>
-          (m.payload && m.payload.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (m.key && m.key.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    : messages;
+          (m.payload && m.payload.toLowerCase().includes(q)) ||
+          (m.key && m.key.toLowerCase().includes(q))
+      );
+    }
+
+    return result;
+  }, [messages, searchQuery, effectiveDateFilterMs]);
 
   return (
     <div className="topic-window">
@@ -86,6 +110,25 @@ export function TopicWindow({ topic, searchQuery }: TopicWindowProps) {
         <button className="bp5-button bp5-minimal bp5-small" onClick={handleSeek}>
           Seek
         </button>
+        <div className="local-date-filter">
+          <span className="date-filter-label">Filter from:</span>
+          <input
+            type="datetime-local"
+            step="1"
+            value={localDateFilter}
+            onChange={(e) => setLocalDateFilter(e.target.value)}
+            title="Local date filter (overrides global)"
+          />
+          {localDateFilter && (
+            <button
+              className="bp5-button bp5-minimal bp5-small"
+              onClick={() => setLocalDateFilter('')}
+              title="Clear local filter"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
       <MessageList messages={filteredMessages} searchQuery={searchQuery} />
     </div>

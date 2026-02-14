@@ -14,9 +14,10 @@ import '@blueprintjs/icons/lib/css/blueprint-icons.css';
 interface MosaicLayoutProps {
   topics: string[];
   searchQuery?: string;
+  globalDateFilterMs?: number;
 }
 
-export function MosaicLayout({ topics, searchQuery }: MosaicLayoutProps) {
+export function MosaicLayout({ topics, searchQuery, globalDateFilterMs }: MosaicLayoutProps) {
   const [mosaicValue, setMosaicValue] = useState<MosaicNode<string> | null>(null);
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export function MosaicLayout({ topics, searchQuery }: MosaicLayoutProps) {
     <Mosaic<string>
       renderTile={(id, path) => (
         <MosaicWindow<string> path={path} title={`Topic: ${id}`}>
-          <TopicWindow topic={id} searchQuery={searchQuery} />
+          <TopicWindow topic={id} searchQuery={searchQuery} globalDateFilterMs={globalDateFilterMs} />
         </MosaicWindow>
       )}
       value={mosaicValue}

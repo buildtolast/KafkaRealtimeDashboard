@@ -1,21 +1,22 @@
 # Kafka Dashboard — Audio Presentation Script
 
-> This script accompanies the audio file `presentation.m4a`.
-> Duration: ~8 minutes | Voice: Samantha (macOS)
+> This script accompanies `presentation.mp4` and `presentation.m4a`.
+> Duration: ~15:24 | Voice: Tessa 🇿🇦 (macOS) | Pacing: ~15s speech + 2.5s pause
 
 ---
 
 ## Table of Contents
 
 1. [Introduction](#1-introduction) (0:00)
-2. [What It Does](#2-what-it-does) (0:30)
-3. [Architecture Overview](#3-architecture-overview) (1:30)
-4. [Backend Deep Dive — Rust](#4-backend-deep-dive) (2:45)
-5. [Frontend Deep Dive — React](#5-frontend-deep-dive) (4:15)
-6. [Docker & Deployment](#6-docker--deployment) (5:30)
-7. [Using the Dashboard](#7-using-the-dashboard) (6:15)
-8. [Developing Further](#8-developing-further) (7:15)
-9. [Closing](#9-closing) (8:00)
+2. [What It Does](#2-what-it-does) (0:35)
+3. [Architecture Overview](#3-architecture-overview) (1:55)
+4. [Backend Deep Dive — TopicManager](#4-backend-deep-dive) (3:57)
+5. [Backend Deep Dive — WebSocket & API](#5-backend-continued) (5:06)
+6. [Frontend Deep Dive — React](#6-frontend-deep-dive) (6:48)
+7. [Docker & Deployment](#7-docker--deployment) (9:16)
+8. [Using the Dashboard](#8-using-the-dashboard) (11:09)
+9. [Developing Further](#9-developing-further) (12:52)
+10. [Closing](#10-closing) (14:39)
 
 ---
 

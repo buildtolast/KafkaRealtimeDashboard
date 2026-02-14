@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seed
+  namespace: kafka-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seed
+  template:
+    metadata:
+      labels:
+        app: seed
+    spec:
+      containers:
+      - name: seed
+        image: apache/kafka:3.7.0
+        command:
+        - /bin/bash
+        - /scripts/seed-topics.sh
+        env:
+        - name: KAFKA_BROKER
+          value: "kafka:9092"
+        volumeMounts:
+        - name: seed-script
+          mountPath: /scripts
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: seed-script
+        configMap:
+          name: seed-script
+          defaultMode: 0755

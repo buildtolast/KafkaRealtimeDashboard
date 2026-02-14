@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-config
+  namespace: kafka-dashboard
+data:
+  KAFKA_BROKERS: "kafka:9092"
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "3001"
+  STATIC_DIR: "./static"
+  RUST_LOG: "info"
+  CONSUMER_GROUP: "kafka-dashboard"

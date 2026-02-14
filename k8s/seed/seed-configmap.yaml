@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seed-script
+  namespace: kafka-dashboard
+data:
+  seed-topics.sh: |
+    #!/bin/bash
+    # Wait for Kafka to be ready, then create test topics and produce sample messages
+    set -e
+
+    KAFKA_BROKER="${KAFKA_BROKER:-kafka:9092}"
+    KAFKA_BIN="/opt/kafka/bin"
+
+    echo "Waiting for Kafka to be ready..."
+    until $KAFKA_BIN/kafka-topics.sh --bootstrap-server "$KAFKA_BROKER" --list > /dev/null 2>&1; do
+      sleep 2
+    done
+    echo "Kafka is ready."
+
+    # Create test topics
+    for topic in orders users notifications logs; do
+      echo "Creating topic: $topic"
+      $KAFKA_BIN/kafka-topics.sh --bootstrap-server "$KAFKA_BROKER" \
+        --create --topic "$topic" --partitions 2 --replication-factor 1 \
+        --if-not-exists
+    done
+
+    echo "All topics created. Starting message producer loop..."
+
+    # Produce sample messages in a loop
+    i=0
+    while true; do
+      i=$((i + 1))
+      ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+      echo "{\"id\":$i,\"item\":\"widget-$((RANDOM % 100))\",\"qty\":$((RANDOM % 10 + 1)),\"ts\":\"$ts\"}" | \
+        $KAFKA_BIN/kafka-console-producer.sh --bootstrap-server "$KAFKA_BROKER" --topic orders 2>/dev/null
+
+      echo "{\"user\":\"user-$((RANDOM % 50))\",\"action\":\"login\",\"ts\":\"$ts\"}" | \
+        $KAFKA_BIN/kafka-console-producer.sh --bootstrap-server "$KAFKA_BROKER" --topic users 2>/dev/null
+
+      echo "{\"type\":\"alert\",\"msg\":\"Notification #$i\",\"ts\":\"$ts\"}" | \
+        $KAFKA_BIN/kafka-console-producer.sh --bootstrap-server "$KAFKA_BROKER" --topic notifications 2>/dev/null
+
+      echo "{\"level\":\"info\",\"service\":\"api\",\"msg\":\"Request processed #$i\",\"ts\":\"$ts\"}" | \
+        $KAFKA_BIN/kafka-console-producer.sh --bootstrap-server "$KAFKA_BROKER" --topic logs 2>/dev/null
+
+      echo "Produced batch $i"
+      sleep 2
+    done

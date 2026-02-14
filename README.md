@@ -365,21 +365,41 @@ docker compose -f docker-compose.full.yml down
 
 ### Option B: Dashboard Only (External Kafka)
 
-Connect the dashboard to your own Kafka cluster — no bundled broker, no seed data:
+Connect the dashboard to your own Kafka cluster — no bundled broker, no seed data.
+
+**Remote Kafka (another machine, cloud, AWS MSK, etc.):**
 
 ```bash
-# Default: connects to localhost:9092
-docker compose up -d
+# Point to Kafka on another machine by IP or hostname
+KAFKA_BROKERS=192.168.1.50:9092 docker compose up -d
 
-# Override with your Kafka cluster address
-KAFKA_BROKERS=my-kafka-cluster:9092 docker compose up -d
+# Multiple brokers
+KAFKA_BROKERS=broker1:9092,broker2:9092 docker compose up -d
 
 # Or use a .env file for persistent config
-echo "KAFKA_BROKERS=my-kafka-cluster:9092" > .env
+echo "KAFKA_BROKERS=192.168.1.50:9092" > .env
 docker compose up -d
 ```
 
-The dashboard container includes `host.docker.internal` mapping, so it can reach Kafka running on your host machine. You can also change the broker address at runtime via the UI header — no restart needed.
+> **Important:** The Kafka broker on the remote machine must have its `advertised.listeners` configured to be reachable from the dashboard container (use the machine's LAN IP, not `localhost`).
+
+**Kafka running on the same host (outside Docker):**
+
+```bash
+# host.docker.internal maps to the host machine
+KAFKA_BROKERS=host.docker.internal:9094 docker compose up -d
+```
+
+**Kafka in another Docker Compose stack (same machine):**
+
+```bash
+# Join the other stack's network so containers discover each other by name
+KAFKA_NETWORK=rustexperimental_app-network \
+KAFKA_BROKERS=kafka:9092 \
+docker compose -f docker-compose.yml -f docker-compose.network.yml up -d
+```
+
+You can also change the broker address at runtime via the UI header — no restart needed.
 
 ```bash
 # View logs
@@ -443,6 +463,7 @@ KafkaDashboard/
 ├── Dockerfile                    # 3-stage: Node → Rust → debian-slim (~85 MB)
 ├── docker-compose.yml            # Dashboard only — connect to external Kafka
 ├── docker-compose.full.yml       # Full stack: Kafka + Dashboard + Seed Producer
+├── docker-compose.network.yml    # Override: join another Docker Compose network
 ├── .dockerignore
 ├── scripts/
 │   └── seed-topics.sh            # Creates 4 topics, produces JSON messages every 2s

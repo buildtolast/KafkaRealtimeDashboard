@@ -3,12 +3,15 @@
 # Usage:
 #   docker compose up -d
 #
-# Override Kafka broker address:
-#   KAFKA_BROKERS=my-kafka-cluster:9092 docker compose up -d
+# Point to your Kafka cluster (another machine, remote, cloud, etc.):
+#   KAFKA_BROKERS=192.168.1.50:9092 docker compose up -d
 #
-# Or create a .env file:
-#   echo "KAFKA_BROKERS=my-kafka-cluster:9092" > .env
+# Or use a .env file for persistent config:
+#   echo "KAFKA_BROKERS=192.168.1.50:9092" > .env
 #   docker compose up -d
+#
+# Multiple brokers:
+#   KAFKA_BROKERS=broker1:9092,broker2:9092,broker3:9092 docker compose up -d
 #
 # Dashboard: http://localhost:3001
 # You can also change the broker at runtime via the UI header.

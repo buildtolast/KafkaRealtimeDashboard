@@ -233,7 +233,7 @@ Pause is implemented purely on the client side. The WebSocket stays connected (t
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  1. LAUNCH                                                           │
-│     docker compose up -d                                            │
+│     docker compose -f docker-compose.full.yml up -d                 │
 │     Browser → http://localhost:3001                                 │
 │                                                                      │
 │  2. BROKER CONFIG (optional)                                         │
@@ -333,10 +333,16 @@ Pause is implemented purely on the client side. The WebSocket stays connected (t
 
 ---
 
-## Quick Start (Docker)
+## Deployment Options
+
+Two Docker Compose files are provided for different use cases:
+
+### Option A: Full Stack (End-to-End)
+
+Spins up Kafka + Dashboard + Seed Producer — everything you need for a self-contained demo or local development:
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.full.yml up -d
 ```
 
 This starts three services:
@@ -351,9 +357,35 @@ Open **http://localhost:3001** in your browser.
 
 ```bash
 # View logs
-docker compose logs -f dashboard
+docker compose -f docker-compose.full.yml logs -f dashboard
 
 # Stop everything
+docker compose -f docker-compose.full.yml down
+```
+
+### Option B: Dashboard Only (External Kafka)
+
+Connect the dashboard to your own Kafka cluster — no bundled broker, no seed data:
+
+```bash
+# Default: connects to localhost:9092
+docker compose up -d
+
+# Override with your Kafka cluster address
+KAFKA_BROKERS=my-kafka-cluster:9092 docker compose up -d
+
+# Or use a .env file for persistent config
+echo "KAFKA_BROKERS=my-kafka-cluster:9092" > .env
+docker compose up -d
+```
+
+The dashboard container includes `host.docker.internal` mapping, so it can reach Kafka running on your host machine. You can also change the broker address at runtime via the UI header — no restart needed.
+
+```bash
+# View logs
+docker compose logs -f dashboard
+
+# Stop
 docker compose down
 ```
 
@@ -365,7 +397,7 @@ docker compose down
 
 - Rust 1.88+ (for `time` crate MSRV)
 - Node.js 18+
-- A running Kafka broker (use `docker compose up kafka -d` to start just the broker)
+- A running Kafka broker (use `docker compose -f docker-compose.full.yml up kafka -d` to start just the broker)
 
 ### Backend
 
@@ -409,7 +441,8 @@ KafkaDashboard/
 ├── Cargo.toml                    # Rust deps + feature flags (static-kafka / dynamic-kafka)
 ├── Cargo.lock
 ├── Dockerfile                    # 3-stage: Node → Rust → debian-slim (~85 MB)
-├── docker-compose.yml            # kafka + dashboard + seed producer
+├── docker-compose.yml            # Dashboard only — connect to external Kafka
+├── docker-compose.full.yml       # Full stack: Kafka + Dashboard + Seed Producer
 ├── .dockerignore
 ├── scripts/
 │   └── seed-topics.sh            # Creates 4 topics, produces JSON messages every 2s

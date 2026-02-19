@@ -1,3 +1,4 @@
+use crate::config;
 use crate::models::KafkaMessage;
 use crate::TopicManager;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -13,11 +14,19 @@ pub async fn ws_handler(
     topic_manager: web::Data<TopicManager>,
 ) -> actix_web::Result<HttpResponse> {
     let topic = path.into_inner();
+
+    // Validate topic name
+    if let Err(e) = config::validate_topic_name(&topic) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": e
+        })));
+    }
+
     let (res, session, msg_stream) = actix_ws::handle(&req, stream)?;
 
     let rx = topic_manager.subscribe(&topic).await;
 
-    log::info!("WebSocket client connected for topic: {}", topic);
+    tracing::info!(topic = %topic, "WebSocket client connected");
 
     actix_rt::spawn(ws_session(session, msg_stream, rx, topic));
 
@@ -48,10 +57,10 @@ async fn ws_session(
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        log::warn!("WebSocket client lagged {} messages on topic {}", n, topic);
+                        tracing::warn!(topic = %topic, lagged = n, "WebSocket client lagged");
                     }
                     Err(broadcast::error::RecvError::Closed) => {
-                        log::warn!("Broadcast channel closed for topic {}", topic);
+                        tracing::warn!(topic = %topic, "Broadcast channel closed");
                         break;
                     }
                 }
@@ -79,5 +88,5 @@ async fn ws_session(
         }
     }
 
-    log::info!("WebSocket client disconnected from topic: {}", topic);
+    tracing::info!(topic = %topic, "WebSocket client disconnected");
 }

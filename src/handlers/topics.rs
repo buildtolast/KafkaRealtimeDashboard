@@ -13,11 +13,11 @@ pub async fn get_topics(
     })
     .await
     .map_err(|e| {
-        log::error!("Blocking error: {}", e);
+        tracing::error!(error = %e, "Blocking error in get_topics");
         actix_web::error::ErrorInternalServerError("Internal error")
     })?
     .map_err(|e| {
-        log::error!("Kafka metadata error: {}", e);
+        tracing::error!(error = %e, "Kafka metadata error");
         actix_web::error::ErrorInternalServerError("Failed to fetch topics")
     })?;
 

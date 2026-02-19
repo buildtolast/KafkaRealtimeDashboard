@@ -1,3 +1,4 @@
+use crate::config::{self, SecurityConfig, SharedSecurityConfig};
 use crate::models::{KafkaMessage, SeekRequest};
 use crate::TopicManager;
 use actix_web::{web, HttpResponse};
@@ -7,26 +8,38 @@ use rdkafka::topic_partition_list::Offset;
 use rdkafka::ClientConfig;
 use std::time::Duration;
 
+const MAX_SEEK_MESSAGES: usize = 1000;
+
 pub async fn seek_messages(
     path: web::Path<String>,
     body: web::Json<SeekRequest>,
     topic_manager: web::Data<TopicManager>,
+    security: web::Data<SharedSecurityConfig>,
 ) -> actix_web::Result<HttpResponse> {
     let topic = path.into_inner();
+
+    // Validate topic name
+    if let Err(e) = config::validate_topic_name(&topic) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": e
+        })));
+    }
+
     let timestamp_ms = body.timestamp_ms;
-    let max_messages = body.max_messages.unwrap_or(200);
+    let max_messages = body.max_messages.unwrap_or(200).min(MAX_SEEK_MESSAGES);
     let brokers = topic_manager.get_brokers().await;
+    let sec = security.read().await.clone();
 
     let result = web::block(move || {
-        fetch_messages_from_timestamp(&brokers, &topic, timestamp_ms, max_messages)
+        fetch_messages_from_timestamp(&brokers, &topic, timestamp_ms, max_messages, &sec)
     })
     .await
     .map_err(|e| {
-        log::error!("Blocking error in seek: {}", e);
+        tracing::error!(error = %e, "Blocking error in seek");
         actix_web::error::ErrorInternalServerError("Internal error")
     })?
     .map_err(|e| {
-        log::error!("Seek error: {}", e);
+        tracing::error!(error = %e, "Seek error");
         actix_web::error::ErrorInternalServerError(format!("Seek failed: {}", e))
     })?;
 
@@ -38,11 +51,17 @@ fn fetch_messages_from_timestamp(
     topic: &str,
     timestamp_ms: i64,
     max_messages: usize,
+    security: &SecurityConfig,
 ) -> Result<Vec<KafkaMessage>, String> {
-    let consumer: BaseConsumer = ClientConfig::new()
+    let mut config = ClientConfig::new();
+    config
         .set("bootstrap.servers", brokers)
         .set("group.id", "kafka-dashboard-seek")
-        .set("enable.auto.commit", "false")
+        .set("enable.auto.commit", "false");
+    crate::kafka::apply_security(&mut config, security);
+    crate::kafka::apply_timeouts(&mut config);
+
+    let consumer: BaseConsumer = config
         .create()
         .map_err(|e| format!("Consumer creation failed: {}", e))?;
 
@@ -73,7 +92,7 @@ fn fetch_messages_from_timestamp(
     for elem in offsets.elements() {
         let offset = match elem.offset() {
             Offset::Offset(o) => Offset::Offset(o),
-            _ => Offset::End, // No messages at that timestamp
+            _ => Offset::End,
         };
         assign_tpl
             .add_partition_offset(elem.topic(), elem.partition(), offset)
@@ -101,13 +120,12 @@ fn fetch_messages_from_timestamp(
                 });
             }
             Some(Err(e)) => {
-                log::warn!("Poll error during seek: {}", e);
+                tracing::warn!(error = %e, "Poll error during seek");
                 break;
             }
             None => {
-                // No more messages available
                 if messages.is_empty() {
-                    continue; // Keep trying until deadline
+                    continue;
                 }
                 break;
             }

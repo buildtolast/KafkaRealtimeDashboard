@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { KafkaMessage } from '../types';
+import { useMessageTracking } from '../contexts/MessageTrackingContext';
 
 const MAX_MESSAGES = 500;
 const RECONNECT_DELAY = 3000;
@@ -11,6 +12,7 @@ export function useKafkaStream(topic: string) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
   const pausedRef = useRef(false);
+  const tracking = useMessageTracking();
 
   const clear = useCallback(() => setMessages([]), []);
 
@@ -66,6 +68,13 @@ export function useKafkaStream(topic: string) {
       ws.onmessage = (event) => {
         if (pausedRef.current) return;
         const msg: KafkaMessage = JSON.parse(event.data);
+
+        // Feed message into shared tracking context for chart + search
+        if (tracking) {
+          tracking.recordMessage(topic);
+          tracking.addMessage(msg);
+        }
+
         setMessages((prev) => {
           const next = [msg, ...prev];
           return next.length > MAX_MESSAGES ? next.slice(0, MAX_MESSAGES) : next;
@@ -80,7 +89,7 @@ export function useKafkaStream(topic: string) {
       clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [topic]);
+  }, [topic, tracking]);
 
   return { messages, connected, paused, clear, togglePause, seekToTimestamp };
 }

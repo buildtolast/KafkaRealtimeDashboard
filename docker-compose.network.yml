@@ -1,0 +1,26 @@
+# Network Override — Join an existing Docker Compose network
+#
+# Use this when Kafka runs in another Docker Compose stack on the SAME machine.
+# This lets the dashboard discover Kafka by container name (e.g., "kafka:9092")
+# without exposing ports to the host.
+#
+# Usage:
+#   KAFKA_NETWORK=rustexperimental_app-network \
+#   KAFKA_BROKERS=kafka:9092 \
+#   docker compose -f docker-compose.yml -f docker-compose.network.yml up -d
+#
+# Find your Kafka network name:
+#   docker network ls
+
+services:
+  dashboard:
+    networks:
+      - default
+      - kafka-external
+
+networks:
+  default:
+    driver: bridge
+  kafka-external:
+    external: true
+    name: ${KAFKA_NETWORK:?Set KAFKA_NETWORK to the Docker network where Kafka runs}

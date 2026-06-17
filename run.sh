@@ -4,6 +4,7 @@
 # ============================================================================
 # Usage:
 #   ./run.sh                      # Run with defaults (localhost:9094, port 3001)
+#   ./run.sh --build              # Build everything from source (frontend + release backend), then run
 #   ./run.sh --full               # Full stack Docker (Kafka + Dashboard + Seed)
 #   ./run.sh --docker             # App-only Docker (connect to external Kafka)
 #   ./run.sh --confluent          # Connect to Confluent Cloud (set env vars below)
@@ -42,6 +43,7 @@ print_help() {
     echo ""
     echo "Usage:"
     echo "  ./run.sh                Run from source with cargo (default)"
+    echo "  ./run.sh --build        Build everything from source (frontend + release backend), then run"
     echo "  ./run.sh --full         Full stack Docker: Kafka + Dashboard + Seed Producer"
     echo "  ./run.sh --docker       App-only Docker (set KAFKA_BROKERS env var)"
     echo "  ./run.sh --confluent    Connect to Confluent Cloud (prompts for credentials)"
@@ -78,7 +80,28 @@ print_config() {
     echo ""
 }
 
+build_frontend() {
+    echo "Building frontend from source..."
+    echo ""
+    (
+        cd frontend
+        if [[ -f package-lock.json ]]; then
+            npm ci
+        else
+            npm install
+        fi
+        npm run build
+    )
+    echo ""
+    echo "Frontend built → frontend/dist"
+    echo ""
+}
+
 run_cargo() {
+    if [[ "${BUILD}" -eq 1 ]]; then
+        build_frontend
+    fi
+
     print_config
 
     ARGS=(
@@ -101,9 +124,19 @@ run_cargo() {
         ARGS+=("--sasl-password" "${KAFKA_SASL_PASSWORD}")
     fi
 
-    echo "Starting with: cargo run -- ${ARGS[*]}"
-    echo ""
-    cargo run -- "${ARGS[@]}"
+    if [[ "${BUILD}" -eq 1 ]]; then
+        echo "Building backend (release) from source..."
+        echo ""
+        cargo build --release
+        echo ""
+        echo "Starting with: ./target/release/kafka-dashboard ${ARGS[*]}"
+        echo ""
+        ./target/release/kafka-dashboard "${ARGS[@]}"
+    else
+        echo "Starting with: cargo run -- ${ARGS[*]}"
+        echo ""
+        cargo run -- "${ARGS[@]}"
+    fi
 }
 
 run_full_docker() {
@@ -199,8 +232,10 @@ run_stop() {
 # ── Parse arguments ─────────────────────────────────────────────────────────
 
 MODE=""
+BUILD=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --build)      BUILD=1; shift ;;
         --full)       MODE="full"; shift ;;
         --docker)     MODE="docker"; shift ;;
         --confluent)  MODE="confluent"; shift ;;
